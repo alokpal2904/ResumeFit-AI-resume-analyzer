@@ -1,44 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'firebase_options.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
 import 'core/router/app_router.dart';
 import 'presentation/providers/providers.dart';
+import 'domain/models/models.dart';
 import 'presentation/screens/auth/login_screen.dart';
 import 'presentation/screens/dashboard/dashboard_screen.dart';
-
-import 'data/database/database_helper.dart';
-import 'data/models/resume_history_model.dart';
-import 'package:uuid/uuid.dart';
-
-Future<void> _seedDatabase() async {
-  final db = DatabaseHelper.instance;
-  final resumes = await db.readAllResumes();
-  if (resumes.isEmpty) {
-    await db.create(ResumeHistoryModel(
-      id: const Uuid().v4(),
-      title: 'Sample Software Engineer Resume',
-      summary: 'A strong resume with excellent backend experience but lacking some cloud deployment details.',
-      score: 85.0,
-      createdAt: DateTime.now(),
-    ));
-    await db.create(ResumeHistoryModel(
-      id: const Uuid().v4(),
-      title: 'Sample Product Manager Resume',
-      summary: 'Good product sense demonstrated. Could use more concrete metrics in the experience section.',
-      score: 72.5,
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-    ));
-    print('Database seeded with sample resumes.');
-  } else {
-    print('Database already contains ${resumes.length} resumes.');
-  }
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,10 +26,16 @@ Future<void> main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Initialize and seed database
-  await _seedDatabase();
+  // Initialize Google Sign-In (required by google_sign_in v7+, mobile only).
+  // google_sign_in does NOT support Windows or Web via this path.
+  final bool isMobile = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+  if (isMobile) {
+    await GoogleSignIn.instance.initialize();
+  }
 
-  // Set system UI overlay style for premium light theme
+  // Premium status bar style (mobile/web only — no-op on desktop)
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -65,11 +46,13 @@ Future<void> main() async {
     ),
   );
 
-  // Lock to portrait for mobile
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Lock to portrait on mobile only
+  if (isMobile) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
 
   runApp(const ProviderScope(child: ResumeAnalyzerApp()));
 }
@@ -80,6 +63,16 @@ class ResumeAnalyzerApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authStateProvider);
+
+    // Reload history when auth state changes (login / logout / switch account).
+    ref.listen<AsyncValue<AppUser?>>(authStateProvider, (previous, next) {
+      final previousUid = previous?.value?.uid;
+      final nextUid = next.value?.uid;
+
+      if (previousUid != nextUid) {
+        ref.read(resumeAnalysesProvider.notifier).reload();
+      }
+    });
 
     return MaterialApp(
       title: 'Resume Analyzer',
@@ -100,7 +93,7 @@ class ResumeAnalyzerApp extends ConsumerWidget {
   }
 }
 
-/// Premium splash screen shown while Firebase initializes auth state.
+/// Premium splash screen shown while Firebase initialises auth state.
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();
 

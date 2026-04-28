@@ -28,16 +28,26 @@ class ResumeAnalysis {
   bool get hasJobDescription =>
       jobDescription != null && jobDescription!.trim().isNotEmpty;
 
-  /// Create from the structured JSON returned by the AI.
+  /// Create from the structured JSON returned by the AI,
+  /// or from a Firestore document (which includes analyzed_at).
   factory ResumeAnalysis.fromJson(Map<String, dynamic> json, {
     required String id,
     required String fileName,
     String? jobDescription,
   }) {
+    // Parse analyzed_at: present in Firestore docs, absent in fresh AI responses.
+    DateTime analyzedAt = DateTime.now();
+    final rawDate = json['analyzed_at'];
+    if (rawDate != null) {
+      try {
+        analyzedAt = DateTime.parse(rawDate as String);
+      } catch (_) {}
+    }
+
     return ResumeAnalysis(
       id: id,
       fileName: fileName,
-      analyzedAt: DateTime.now(),
+      analyzedAt: analyzedAt,
       atsScore: (json['ats_score'] as num?)?.toInt() ?? 0,
       strengths: List<String>.from(json['strengths'] ?? []),
       weaknesses: List<String>.from(json['weaknesses'] ?? []),

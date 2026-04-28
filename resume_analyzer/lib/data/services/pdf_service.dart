@@ -10,7 +10,6 @@ class PdfService {
       final StringBuffer buffer = StringBuffer();
 
       for (int i = 0; i < document.pages.count; i++) {
-        final page = document.pages[i];
         final text = PdfTextExtractor(document).extractText(startPageIndex: i);
         buffer.writeln(text);
       }

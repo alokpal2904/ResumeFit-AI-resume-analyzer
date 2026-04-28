@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show AsyncCallback;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -22,6 +23,7 @@ class DashboardScreen extends ConsumerWidget {
     final analyses = ref.watch(resumeAnalysesProvider);
     final analysisState = ref.watch(analysisStateProvider);
     final authState = ref.watch(authStateProvider);
+    final historyAsync = ref.watch(userHistoryProvider);
 
     final user = authState.value;
 
@@ -130,8 +132,8 @@ class DashboardScreen extends ConsumerWidget {
                     const Spacer(),
                     if (analyses.isNotEmpty)
                       TextButton.icon(
-                        onPressed: () {
-                          ref.read(resumeAnalysesProvider.notifier).clear();
+                        onPressed: () async {
+                          await ref.read(resumeAnalysesProvider.notifier).clear();
                         },
                         icon: const Icon(Iconsax.trash, size: 16),
                         label: const Text('Clear'),
@@ -164,7 +166,21 @@ class DashboardScreen extends ConsumerWidget {
               ),
 
             // ── Resume List or Empty State ──
-            if (analyses.isEmpty && !analysisState.isLoading)
+            if (historyAsync.isLoading && analyses.isEmpty)
+              // Show shimmers while Firestore history is loading
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (_, __) => const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: ShimmerCard(),
+                    ),
+                    childCount: 3,
+                  ),
+                ),
+              )
+            else if (analyses.isEmpty && !analysisState.isLoading)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: EmptyState(
@@ -197,8 +213,8 @@ class DashboardScreen extends ConsumerWidget {
                                 ref.read(selectedAnalysisProvider.notifier).state = analysis;
                                 Navigator.pushNamed(context, '/detail');
                               },
-                              onDelete: () {
-                                ref.read(resumeAnalysesProvider.notifier).remove(analysis.id);
+                              onDelete: () async {
+                                await ref.read(resumeAnalysesProvider.notifier).remove(analysis.id);
                               },
                             ),
                           ),
@@ -519,7 +535,7 @@ class _StatCard extends StatelessWidget {
 class _ResumeCard extends StatelessWidget {
   final ResumeAnalysis analysis;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final AsyncCallback onDelete;
 
   const _ResumeCard({
     required this.analysis,

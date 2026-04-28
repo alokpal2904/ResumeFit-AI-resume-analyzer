@@ -3,45 +3,113 @@ import '../../data/services/services.dart';
 import '../../domain/models/models.dart';
 import '../../data/database/database_helper.dart';
 
-// ─── Service Providers ───
+// ─── Service Providers ───────────────────────────────────────────────────────
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService());
 final aiServiceProvider = Provider<AIService>((ref) => AIService());
 final pdfServiceProvider = Provider<PdfService>((ref) => PdfService());
-final databaseHelperProvider = Provider<DatabaseHelper>((ref) => DatabaseHelper.instance);
+final historyServiceProvider = Provider<HistoryService>((ref) => HistoryService());
+final databaseHelperProvider =
+    Provider<DatabaseHelper>((ref) => DatabaseHelper.instance);
 
-// ─── Auth State ───
+// ─── Auth State ──────────────────────────────────────────────────────────────
 
+/// Emits the current [AppUser?] from Firebase Auth changes.
 final authStateProvider = StreamProvider<AppUser?>((ref) {
   final authService = ref.watch(authServiceProvider);
   return authService.authStateChanges;
 });
 
-// ─── Resume Analysis State ───
+// ─── Firestore History ───────────────────────────────────────────────────────
+
+/// Loads the current user's analysis history from Firestore.
+/// Re-fetches automatically whenever the auth state changes (login / logout).
+final userHistoryProvider =
+    FutureProvider.autoDispose<List<ResumeAnalysis>>((ref) async {
+  final authState = await ref.watch(authStateProvider.future);
+  if (authState == null) return [];
+
+  final history = ref.read(historyServiceProvider);
+  return history.loadAll(authState.uid);
+});
+
+// ─── Resume Analysis In-Session State ────────────────────────────────────────
 
 /// Holds the list of completed resume analyses for the current session.
+/// On first build it initialises itself from Firestore.
 final resumeAnalysesProvider =
     StateNotifierProvider<ResumeAnalysesNotifier, List<ResumeAnalysis>>((ref) {
-  return ResumeAnalysesNotifier();
+  return ResumeAnalysesNotifier(ref);
 });
 
 class ResumeAnalysesNotifier extends StateNotifier<List<ResumeAnalysis>> {
-  ResumeAnalysesNotifier() : super([]);
+  final Ref _ref;
+  bool _loaded = false;
 
-  void add(ResumeAnalysis analysis) {
-    state = [analysis, ...state];
+  ResumeAnalysesNotifier(this._ref) : super([]) {
+    _loadFromFirestore();
   }
 
-  void remove(String id) {
-    state = state.where((a) => a.id != id).toList();
+  /// Load history from Firestore for the current user.
+  Future<void> _loadFromFirestore() async {
+    if (_loaded) return;
+    try {
+      final authState = await _ref.read(authStateProvider.future);
+      if (authState == null) return;
+
+      final history = _ref.read(historyServiceProvider);
+      final analyses = await history.loadAll(authState.uid);
+      state = analyses;
+      _loaded = true;
+    } catch (e) {
+      // If Firestore load fails, start with empty list — don't crash.
+    }
   }
 
-  void clear() {
+  /// Reload from Firestore (call after sign-in).
+  Future<void> reload() async {
+    _loaded = false;
     state = [];
+    await _loadFromFirestore();
+  }
+
+  /// Add a new analysis and persist it to Firestore.
+  Future<void> add(ResumeAnalysis analysis) async {
+    state = [analysis, ...state];
+    try {
+      final authState = await _ref.read(authStateProvider.future);
+      if (authState != null) {
+        await _ref.read(historyServiceProvider).save(authState.uid, analysis);
+      }
+    } catch (_) {
+      // Persist failure is non-fatal; the analysis is still shown in session.
+    }
+  }
+
+  /// Remove an analysis from memory and Firestore.
+  Future<void> remove(String id) async {
+    state = state.where((a) => a.id != id).toList();
+    try {
+      final authState = await _ref.read(authStateProvider.future);
+      if (authState != null) {
+        await _ref.read(historyServiceProvider).delete(authState.uid, id);
+      }
+    } catch (_) {}
+  }
+
+  /// Clear all analyses from memory and Firestore.
+  Future<void> clear() async {
+    state = [];
+    try {
+      final authState = await _ref.read(authStateProvider.future);
+      if (authState != null) {
+        await _ref.read(historyServiceProvider).deleteAll(authState.uid);
+      }
+    } catch (_) {}
   }
 }
 
-// ─── Analysis Loading State ───
+// ─── Analysis Pipeline State ─────────────────────────────────────────────────
 
 enum AnalysisStatus { idle, pickingFile, extractingText, analyzing, done, error }
 
@@ -129,12 +197,13 @@ class AnalysisStateNotifier extends StateNotifier<AnalysisState> {
   }
 }
 
-// ─── Selected Analysis (for detail screen) ───
+// ─── Selected Analysis (for detail screen) ───────────────────────────────────
 
 final selectedAnalysisProvider = StateProvider<ResumeAnalysis?>((ref) => null);
 
-// ─── AI Provider Selection ───
+// ─── AI Provider Selection ────────────────────────────────────────────────────
 
 enum AIProvider { gemini, openai }
 
-final aiProviderSelectionProvider = StateProvider<AIProvider>((ref) => AIProvider.gemini);
+final aiProviderSelectionProvider =
+    StateProvider<AIProvider>((ref) => AIProvider.gemini);
