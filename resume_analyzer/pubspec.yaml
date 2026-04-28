@@ -1,0 +1,85 @@
+name: resume_analyzer
+description: "AI-Powered Resume Analyzer — Premium SaaS-grade Flutter app"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+  # State Management
+  flutter_riverpod: any
+  riverpod_annotation: any
+
+  # Navigation
+  go_router: any
+
+  # Firebase
+  firebase_core: any
+  firebase_auth: any
+  google_sign_in: any
+  cloud_firestore: any
+
+  # File Picking & PDF
+  file_picker: any
+  syncfusion_flutter_pdfviewer: any
+  syncfusion_flutter_pdf: any
+
+  # AI Integration
+  http: any
+  google_generative_ai: any
+
+  # Gauges & Charts
+  syncfusion_flutter_gauges: any
+
+  # UI Enhancements
+  flutter_animate: any
+  shimmer: any
+  cached_network_image: any
+  flutter_svg: any
+  lottie: any
+  percent_indicator: any
+  google_fonts: any
+  gap: any
+  flutter_staggered_animations: any
+  iconsax: any
+
+  # Utilities
+  uuid: any
+  intl: any
+  path: any
+  equatable: any
+  dartz: any
+  freezed_annotation: any
+  json_annotation: any
+  shared_preferences: any
+  flutter_dotenv: any
+  
+  # Database
+  sqflite: any
+  path_provider: any
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.15
+  freezed: ^3.0.0
+  json_serializable: ^6.9.5
+  riverpod_generator: ^2.6.3
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/
+    - assets/images/
+    - assets/icons/
+    - assets/lottie/
+    - .env
